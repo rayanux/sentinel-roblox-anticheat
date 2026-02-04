@@ -96,4 +96,5 @@ function TeleportCheck:_correctPosition(trackedPlayer, rootPart, memory)
 	end
 end
 
+
 return TeleportCheck
