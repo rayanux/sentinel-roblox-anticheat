@@ -14,6 +14,7 @@ function TrackedPlayer.new(player, sentinelAC)
 		_lastHeartbeat = os.time(),
 		_memory = {},
 		_connections = {},
+		_alive = true,
 	}, TrackedPlayer)
 
 	if player.Character then
@@ -47,18 +48,18 @@ end
 
 function TrackedPlayer:_startStrikeDecay()
 	task.spawn(function()
-		while self.player.Parent do
+		while self._alive and self.player and self.player.Parent do
 			local config = self._sentinel._config
 			task.wait(config.strikeCooldown)
+
+			if not self._alive then
+				break
+			end
 
 			if self._totalStrikes > 0 then
 				for reason, count in pairs(self._strikes) do
 					local newCount = math.max(0, count - config.strikeDecayRate)
-					self._strikes[reason] = newCount
-
-					if newCount == 0 then
-						self._strikes[reason] = nil
-					end
+					self._strikes[reason] = newCount > 0 and newCount or nil
 				end
 
 				self:_recalculateStrikes()
@@ -190,6 +191,8 @@ function TrackedPlayer:setMemory(key, value)
 end
 
 function TrackedPlayer:destroy()
+	self._alive = false
+
 	for _, connection in ipairs(self._connections) do
 		connection:Disconnect()
 	end
@@ -197,6 +200,7 @@ function TrackedPlayer:destroy()
 	table.clear(self._connections)
 	table.clear(self._strikes)
 	table.clear(self._memory)
+
 	setmetatable(self, nil)
 end
 
