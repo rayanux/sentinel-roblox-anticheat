@@ -49,6 +49,12 @@ function Utility.getHumanoid(character)
 	return character:FindFirstChildWhichIsA("Humanoid")
 end
 
+-- checks if character has a forcefield (common spawn protection pattern)
+function Utility.hasForceField(character)
+	if not character then return false end
+	return character:FindFirstChildWhichIsA("ForceField") ~= nil
+end
+
 function Utility.getXZVelocity(velocity)
 	return (velocity * Vector3.new(1, 0, 1)).Magnitude
 end
