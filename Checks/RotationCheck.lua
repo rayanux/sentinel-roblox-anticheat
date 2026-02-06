@@ -20,6 +20,13 @@ function RotationCheck:check(trackedPlayer, deltaTime)
 		return
 	end
 
+	-- skip dead or seated players
+	local humanoid = Utility.getHumanoid(character)
+	if humanoid and (humanoid.Health <= 0 or humanoid.Sit) then
+		memory.rotationViolations = 0
+		return
+	end
+
 	local angularVelocity = rootPart.AssemblyAngularVelocity
 	local magnitude = angularVelocity.Magnitude
 
