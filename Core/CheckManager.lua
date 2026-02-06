@@ -9,6 +9,7 @@ function CheckManager.new(sentinelAC)
 		_checks = {},
 		_connections = {},
 		_lastCheckTime = 0,
+		_playerRotationIndex = 0,
 	}, CheckManager)
 
 	return self
@@ -67,6 +68,8 @@ function CheckManager:_runChecks(deltaTime)
 	if currentTime - self._lastCheckTime < config.checkInterval then
 		return
 	end
+
+	local realDelta = currentTime - self._lastCheckTime
 	self._lastCheckTime = currentTime
 
 	local playerTracker = self._sentinel._playerTracker
@@ -74,15 +77,16 @@ function CheckManager:_runChecks(deltaTime)
 
 	local maxPlayersThisFrame = math.min(#allPlayers, config.maxPlayersPerFrame)
 
-	for i = 1, maxPlayersThisFrame do
-		local trackedPlayer = allPlayers[i]
+	for j = 1, maxPlayersThisFrame do
+		local idx = ((self._playerRotationIndex + j - 1) % #allPlayers) + 1
+		local trackedPlayer = allPlayers[idx]
 
 		if trackedPlayer and not trackedPlayer:isWhitelisted() then
 			for checkName, check in pairs(self._checks) do
 				local configKey = "enable" .. checkName .. "Check"
 
 				if config[configKey] ~= false and check.check then
-					local success, err = pcall(check.check, check, trackedPlayer, deltaTime)
+					local success, err = pcall(check.check, check, trackedPlayer, realDelta)
 
 					if not success then
 						self._sentinel._logger:error("Check %s failed: %s", checkName, tostring(err))
@@ -91,6 +95,8 @@ function CheckManager:_runChecks(deltaTime)
 			end
 		end
 	end
+
+	self._playerRotationIndex = self._playerRotationIndex + maxPlayersThisFrame
 end
 
 function CheckManager:getCheck(checkName)
