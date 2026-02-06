@@ -40,6 +40,16 @@ function StateCheck:_setupStateMonitoring(trackedPlayer, character)
 end
 
 function StateCheck:_onStateChanged(trackedPlayer, character, humanoid, oldState, newState)
+	-- skip during spawn/deploy
+	local config = self._sentinel._config
+	if config.respectForceField and Utility.hasForceField(character) then
+		return
+	end
+
+	if trackedPlayer:hasTeleportGrace() then
+		return
+	end
+
 	if oldState == Enum.HumanoidStateType.Dead then
 		trackedPlayer:addStrikes("Death State Exploit", 10)
 		humanoid:ChangeState(Enum.HumanoidStateType.Dead)
