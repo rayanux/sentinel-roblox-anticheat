@@ -43,6 +43,13 @@ function PlayerTracker:_onPlayerAdded(player)
 	local trackedPlayer = TrackedPlayer.new(player, self._sentinel)
 	self._players[player] = trackedPlayer
 
+	-- whitelist immediately if in config
+	local whitelistedIds = self._sentinel._config.whitelistedUserIds
+	if whitelistedIds and table.find(whitelistedIds, player.UserId) then
+		trackedPlayer:setWhitelisted(true)
+		logger:info("Auto-whitelisted player: %s", player.Name)
+	end
+
 	logger:info("Player joined: %s (UserId: %d)", player.Name, player.UserId)
 end
 
