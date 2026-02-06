@@ -16,7 +16,7 @@ local IsInitialized = false
 local DEFAULT_CONFIG = {
 	-- strike system
 	maxStrikes = 10,              -- kicks at 10 strikes
-	strikeCooldown = 30,          -- decay every 30 seconds
+	strikeCooldown = 60,          -- decay every 60 seconds
 	strikeDecayRate = 1,          -- remove 1 strike per decay
 
 	-- client protection
@@ -43,8 +43,14 @@ local DEFAULT_CONFIG = {
 	kickMessage = "Suspicious activity detected. Code: {reason}",
 	autoKick = true,
 
+	-- integration
+	respectForceField = true,     -- skip checks during forcefield (deploy/spawn)
+
 	-- discord webhook
 	webhookUrl = nil, -- "https://discord.com/api/webhooks/YOUR_WEBHOOK_HERE"
+
+	-- whitelist
+	whitelistedUserIds = {},
 }
 
 function SentinelAC.getInstance()
@@ -148,6 +154,14 @@ function SentinelAC:unwhitelistPlayer(player)
 	if trackedPlayer then
 		trackedPlayer:setWhitelisted(false)
 		self._logger:info("Removed whitelist for player: " .. player.Name)
+	end
+end
+
+-- temporarily allow a teleport without flagging
+function SentinelAC:allowTeleport(player, duration)
+	local trackedPlayer = self:getPlayer(player)
+	if trackedPlayer then
+		trackedPlayer:grantTeleportGrace(duration or 1)
 	end
 end
 
