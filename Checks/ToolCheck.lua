@@ -40,6 +40,12 @@ function ToolCheck:_onChildAdded(trackedPlayer, character, child)
 		return
 	end
 
+	-- skip during deploy (tools are given at once)
+	local config = self._sentinel._config
+	if config.respectForceField and Utility.hasForceField(character) then
+		return
+	end
+
 	local memory = trackedPlayer:getMemory()
 	local currentTime = tick()
 
@@ -67,6 +73,12 @@ function ToolCheck:_onChildAdded(trackedPlayer, character, child)
 end
 
 function ToolCheck:_checkMultipleTools(trackedPlayer, character)
+	-- skip during deploy
+	local config = self._sentinel._config
+	if config.respectForceField and Utility.hasForceField(character) then
+		return
+	end
+
 	local equippedTools = {}
 
 	for _, child in ipairs(character:GetChildren()) do
@@ -89,6 +101,5 @@ function ToolCheck:_checkMultipleTools(trackedPlayer, character)
 			trackedPlayer.player.Name, #equippedTools)
 	end
 end
-
 
 return ToolCheck
