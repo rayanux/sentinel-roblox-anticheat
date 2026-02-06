@@ -19,10 +19,34 @@ function PhysicsCheck:check(trackedPlayer, deltaTime)
 		return
 	end
 
+	-- skip during spawn/deploy (forcefield present) or teleport grace
+	local config = self._sentinel._config
+	if trackedPlayer:hasTeleportGrace() then
+		memory.airTime = 0
+		memory.sustainedAirFrames = 0
+		memory.noclipViolations = 0
+		return
+	end
+
+	if config.respectForceField and Utility.hasForceField(character) then
+		memory.airTime = 0
+		memory.sustainedAirFrames = 0
+		memory.noclipViolations = 0
+		return
+	end
+
 	local rootPart = Utility.getRootPart(character)
 	local humanoid = Utility.getHumanoid(character)
 
 	if not rootPart or not humanoid then
+		return
+	end
+
+	-- skip dead or seated players
+	if humanoid.Health <= 0 or humanoid.Sit then
+		memory.airTime = 0
+		memory.sustainedAirFrames = 0
+		memory.noclipViolations = 0
 		return
 	end
 
@@ -39,29 +63,61 @@ function PhysicsCheck:_checkFly(trackedPlayer, rootPart, humanoid, deltaTime)
 		or currentState == Enum.HumanoidStateType.Flying
 
 	local isMovingUp = rootPart.AssemblyLinearVelocity.Y > 5
+	local isOnGround = humanoid.FloorMaterial ~= Enum.Material.Air
+	local isJumping = currentState == Enum.HumanoidStateType.Jumping
+	local isClimbing = currentState == Enum.HumanoidStateType.Climbing
 
-	if isInAir or isMovingUp then
-		memory.airTime = (memory.airTime or 0) + deltaTime
-	else
+	-- reset on ground, during jumps, or while climbing
+	if isOnGround or isJumping or isClimbing then
 		memory.airTime = 0
+		memory.sustainedAirFrames = 0
 		return
 	end
 
-	if memory.airTime > MAX_AIR_TIME then
+	-- normal freefall (falling down) is fine, only flag sustained upward/hovering
+	if isInAir and not isMovingUp then
+		-- falling normally, decay counters
+		memory.sustainedAirFrames = math.max((memory.sustainedAirFrames or 0) - 1, 0)
+		if memory.sustainedAirFrames <= 0 then
+			memory.airTime = 0
+		end
+		return
+	end
+
+	if isInAir or isMovingUp then
+		memory.airTime = (memory.airTime or 0) + deltaTime
+		memory.sustainedAirFrames = (memory.sustainedAirFrames or 0) + 1
+	else
+		memory.airTime = 0
+		memory.sustainedAirFrames = 0
+		return
+	end
+
+	if memory.airTime > MAX_AIR_TIME and memory.sustainedAirFrames > 15 then
 		local raycastParams = RaycastParams.new()
 		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 		raycastParams.FilterDescendantsInstances = {memory.character}
 
-		local rayResult = workspace:Raycast(
-			rootPart.Position,
-			Vector3.new(0, -20, 0),
-			raycastParams
-		)
+		-- check directly below and at slight offsets
+		local origin = rootPart.Position
+		local noGroundCount = 0
 
-		if not rayResult then
+		for _, offset in ipairs({Vector3.zero, Vector3.new(2, 0, 0), Vector3.new(-2, 0, 0)}) do
+			local rayResult = workspace:Raycast(
+				origin + offset,
+				Vector3.new(0, -50, 0),
+				raycastParams
+			)
+			if not rayResult then
+				noGroundCount = noGroundCount + 1
+			end
+		end
+
+		if noGroundCount >= 2 then
 			trackedPlayer:addStrikes("Fly Hack", 2)
 			self:_correctFly(rootPart, humanoid)
 			memory.airTime = 0
+			memory.sustainedAirFrames = 0
 		end
 	end
 end
@@ -74,19 +130,29 @@ function PhysicsCheck:_checkNoclip(trackedPlayer, character, rootPart)
 	overlapParams.FilterDescendantsInstances = {character}
 	overlapParams.MaxParts = 10
 
-	local overlappingParts = workspace:GetPartsInPart(rootPart, overlapParams)
+	-- check rootPart and head if available
+	local partsToCheck = {rootPart}
+	local head = character:FindFirstChild("Head")
+	if head and head:IsA("BasePart") then
+		table.insert(partsToCheck, head)
+	end
 
-	local solidPartsCount = 0
-	for _, part in ipairs(overlappingParts) do
-		if part.CanCollide then
-			solidPartsCount = solidPartsCount + 1
+	local totalSolidOverlaps = 0
+
+	for _, part in ipairs(partsToCheck) do
+		local overlappingParts = workspace:GetPartsInPart(part, overlapParams)
+
+		for _, overlapping in ipairs(overlappingParts) do
+			if overlapping.CanCollide and overlapping.Transparency < 1 then
+				totalSolidOverlaps = totalSolidOverlaps + 1
+			end
 		end
 	end
 
-	if solidPartsCount >= 2 then
+	if totalSolidOverlaps >= 2 then
 		memory.noclipViolations = (memory.noclipViolations or 0) + 1
 
-		if memory.noclipViolations >= 3 then
+		if memory.noclipViolations >= 5 then
 			trackedPlayer:addStrikes("Noclip", 2)
 			self:_correctNoclip(trackedPlayer, rootPart, memory)
 			memory.noclipViolations = 0
