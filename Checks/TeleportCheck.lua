@@ -13,6 +13,22 @@ function TeleportCheck:init(sentinelAC)
 end
 
 function TeleportCheck:check(trackedPlayer, deltaTime)
+	-- skip if game granted teleport grace
+	if trackedPlayer:hasTeleportGrace() then
+		local memory = trackedPlayer:getMemory()
+		local character = memory.character
+		if Utility.isCharacterValid(character) then
+			local rootPart = Utility.getRootPart(character)
+			if rootPart then
+				memory.lastPosition = rootPart.Position
+				memory.lastCheckTime = tick()
+				memory.positionHistory = {}
+				memory.teleportViolations = 0
+			end
+		end
+		return
+	end
+
 	local memory = trackedPlayer:getMemory()
 	local character = memory.character
 
@@ -20,10 +36,31 @@ function TeleportCheck:check(trackedPlayer, deltaTime)
 		return
 	end
 
+	-- skip during spawn/deploy (forcefield present)
+	local config = self._sentinel._config
+	if config.respectForceField and Utility.hasForceField(character) then
+		local rootPart = Utility.getRootPart(character)
+		if rootPart then
+			memory.lastPosition = rootPart.Position
+			memory.lastCheckTime = tick()
+			memory.positionHistory = {}
+			memory.teleportViolations = 0
+		end
+		return
+	end
+
 	local rootPart = Utility.getRootPart(character)
 	local humanoid = Utility.getHumanoid(character)
 
 	if not rootPart or not humanoid then
+		return
+	end
+
+	-- skip dead players
+	if humanoid.Health <= 0 then
+		memory.lastPosition = nil
+		memory.lastCheckTime = nil
+		memory.teleportViolations = 0
 		return
 	end
 
@@ -45,7 +82,8 @@ function TeleportCheck:check(trackedPlayer, deltaTime)
 	local distance = (currentPosition - memory.lastPosition).Magnitude
 	local distancePerSecond = distance / timeDelta
 
-	if humanoid.Sit then
+	-- skip seated players or players on moving platforms
+	if humanoid.Sit or humanoid:GetState() == Enum.HumanoidStateType.Seated then
 		memory.lastPosition = currentPosition
 		memory.lastCheckTime = currentTime
 		return
@@ -54,6 +92,7 @@ function TeleportCheck:check(trackedPlayer, deltaTime)
 	if distance > EXTREME_DISTANCE then
 		trackedPlayer:addStrikes("Extreme Teleport", 5)
 		self:_correctPosition(trackedPlayer, rootPart, memory)
+		memory.lastCheckTime = currentTime
 		return
 	end
 
@@ -83,9 +122,10 @@ function TeleportCheck:check(trackedPlayer, deltaTime)
 end
 
 function TeleportCheck:_correctPosition(trackedPlayer, rootPart, memory)
-	-- Teleport to previous valid position
+	-- teleport to previous valid position
 	if memory.positionHistory and #memory.positionHistory > 0 then
-		local safePosition = memory.positionHistory[#memory.positionHistory - 1] or memory.positionHistory[1]
+		local histLen = #memory.positionHistory
+		local safePosition = memory.positionHistory[math.max(1, histLen - 1)]
 
 		pcall(function()
 			rootPart.CFrame = CFrame.new(safePosition)
@@ -95,6 +135,5 @@ function TeleportCheck:_correctPosition(trackedPlayer, rootPart, memory)
 		self._sentinel._logger:debug("Corrected position for %s", trackedPlayer.player.Name)
 	end
 end
-
 
 return TeleportCheck
